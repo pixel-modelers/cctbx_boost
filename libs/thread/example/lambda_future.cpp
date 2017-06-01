@@ -8,6 +8,10 @@
 #if ! defined  BOOST_NO_CXX11_DECLTYPE
 #define BOOST_RESULT_OF_USE_DECLTYPE
 #endif
+#ifndef BOOST_NO_CXX11_DECLTYPE_N3276
+#define BOOST_THREAD_NO_CXX11_DECLTYPE_N3276
+#endif
+
 #define BOOST_THREAD_VERSION 4
 //#define BOOST_THREAD_USES_LOG
 #define BOOST_THREAD_USES_LOG_THREAD_ID
@@ -19,7 +23,7 @@
 #include <iostream>
 
 #if    defined BOOST_THREAD_PROVIDES_FUTURE_CONTINUATION \
-  && ! defined BOOST_NO_CXX11_LAMBDAS
+  && ! defined BOOST_NO_CXX11_LAMBDAS && ! (defined BOOST_MSVC && _MSC_VER < 1700)
 
 
 int main()

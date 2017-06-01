@@ -23,7 +23,6 @@
 //  See http://www.boost.org for updates, documentation, and revision history.
 
 #include <new>     // for placement new
-#include <memory>  // for auto_ptr
 #include <cstddef> // size_t, NULL
 
 #include <boost/config.hpp>
@@ -59,13 +58,11 @@ namespace std{
 
 #include <boost/serialization/assume_abstract.hpp>
 
-#define DONT_USE_HAS_NEW_OPERATOR (                    \
+#if ! (                                                \
     defined(__BORLANDC__)                              \
     || BOOST_WORKAROUND(__IBMCPP__, < 1210)            \
     || defined(__SUNPRO_CC) && (__SUNPRO_CC < 0x590)   \
 )
-
-#if ! DONT_USE_HAS_NEW_OPERATOR
 #include <boost/type_traits/has_new_operator.hpp>
 #endif
 
@@ -126,7 +123,7 @@ protected:
     explicit iserializer() :
         basic_iserializer(
             boost::serialization::singleton<
-                BOOST_DEDUCED_TYPENAME 
+                typename 
                 boost::serialization::type_info_implementation< T >::type
             >::get_const_instance()
         )
@@ -196,101 +193,6 @@ BOOST_DLLEXPORT void iserializer<Archive, T>::load_object_data(
 #  pragma warning(disable : 4511 4512)
 #endif
 
-template<class Archive, class T>
-class pointer_iserializer :
-    public basic_pointer_iserializer
-{
-private:
-    virtual const basic_iserializer & get_basic_serializer() const {
-        return boost::serialization::singleton<
-            iserializer<Archive, T>
-        >::get_const_instance();
-    }
-    BOOST_DLLEXPORT virtual void load_object_ptr(
-        basic_iarchive & ar, 
-        void * & x,
-        const unsigned int file_version
-    ) const BOOST_USED;
-protected:
-    // this should alway be a singleton so make the constructor protected
-    pointer_iserializer();
-    ~pointer_iserializer();
-};
-
-#ifdef BOOST_MSVC
-#  pragma warning(pop)
-#endif
-
-// note trick to be sure that operator new is using class specific
-// version if such exists. Due to Peter Dimov.
-// note: the following fails if T has no default constructor.
-// otherwise it would have been ideal
-//struct heap_allocator : public T 
-//{
-//    T * invoke(){
-//        return ::new(sizeof(T));
-//    }
-//}
-
-#if 0
-template<class T>
-struct heap_allocator
-{
-    // boost::has_new_operator< T > doesn't work on these compilers
-    #if DONT_USE_HAS_NEW_OPERATOR
-        // This doesn't handle operator new overload for class T
-        static void * invoke(){
-            return static_cast<T *>(operator new(sizeof(T)));
-        }
-    #else
-        struct has_new_operator {
-            static void * invoke() {
-                return static_cast<T *>((T::operator new)(sizeof(T)));
-            }
-        };
-        struct doesnt_have_new_operator {
-            static void * invoke() {
-                return static_cast<T *>(operator new(sizeof(T)));
-            }
-        };
-        static void * invoke() {
-            typedef BOOST_DEDUCED_TYPENAME
-                mpl::eval_if<
-                    boost::has_new_operator< T >,
-                    mpl::identity<has_new_operator >,
-                    mpl::identity<doesnt_have_new_operator >    
-                >::type typex;
-            return typex::invoke();
-        }
-    #endif
-};
-
-// due to Martin Ecker
-template <typename T>
-class auto_ptr_with_deleter
-{
-public:
-    explicit auto_ptr_with_deleter(T* p) :
-        m_p(p)
-    {}
-    ~auto_ptr_with_deleter(){
-        if (m_p)
-            boost::serialization::access::destroy(m_p);
-    }
-    T* get() const {
-        return m_p;
-    }
-
-    T* release() {
-        T* p = m_p;
-        m_p = NULL;
-        return p;
-    }
-private:
-    T* m_p;
-};
-#endif
-
 // the purpose of this code is to allocate memory for an object
 // without requiring the constructor to be called.  Presumably
 // the allocated object will be subsequently initialized with
@@ -345,7 +247,7 @@ struct heap_allocation {
             }
         };
         static T * invoke_new() {
-            typedef BOOST_DEDUCED_TYPENAME
+            typedef typename
                 mpl::eval_if<
                     boost::has_new_operator< T >,
                     mpl::identity<has_new_operator >,
@@ -354,7 +256,7 @@ struct heap_allocation {
             return typex::invoke_new();
         }
         static void invoke_delete(T *t) {
-            typedef BOOST_DEDUCED_TYPENAME
+            typedef typename
                 mpl::eval_if<
                     boost::has_new_operator< T >,
                     mpl::identity<has_new_operator >,
@@ -383,20 +285,49 @@ private:
     T* m_p;
 };
 
+template<class Archive, class T>
+class pointer_iserializer :
+    public basic_pointer_iserializer
+{
+private:
+    virtual void * heap_allocation() const {
+        detail::heap_allocation<T> h;
+        T * t = h.get();
+        h.release();
+        return t;
+    }
+    virtual const basic_iserializer & get_basic_serializer() const {
+        return boost::serialization::singleton<
+            iserializer<Archive, T>
+        >::get_const_instance();
+    }
+    BOOST_DLLEXPORT virtual void load_object_ptr(
+        basic_iarchive & ar, 
+        void * x,
+        const unsigned int file_version
+    ) const BOOST_USED;
+protected:
+    // this should alway be a singleton so make the constructor protected
+    pointer_iserializer();
+    ~pointer_iserializer();
+};
+
+#ifdef BOOST_MSVC
+#  pragma warning(pop)
+#endif
+
 // note: BOOST_DLLEXPORT is so that code for polymorphic class
 // serialized only through base class won't get optimized out
 template<class Archive, class T>
 BOOST_DLLEXPORT void pointer_iserializer<Archive, T>::load_object_ptr(
     basic_iarchive & ar, 
-    void * & t,
+    void * t,
     const unsigned int file_version
 ) const
 {
     Archive & ar_impl = 
         boost::serialization::smart_cast_reference<Archive &>(ar);
 
-    heap_allocation<T> h;
-    t = NULL;
     // note that the above will throw std::bad_alloc if the allocation
     // fails so we don't have to address this contingency here.
 
@@ -406,10 +337,10 @@ BOOST_DLLEXPORT void pointer_iserializer<Archive, T>::load_object_ptr(
     BOOST_TRY {
         // this addresses an obscure situation that occurs when 
         // load_constructor de-serializes something through a pointer.
-        ar.next_object_pointer(h.get());
+        ar.next_object_pointer(t);
         boost::serialization::load_construct_data_adl<Archive, T>(
             ar_impl,
-            h.get(), 
+            static_cast<T *>(t),
             file_version
         );
     }
@@ -421,18 +352,14 @@ BOOST_DLLEXPORT void pointer_iserializer<Archive, T>::load_object_ptr(
     }
     BOOST_CATCH_END
 
-    ar_impl >> boost::serialization::make_nvp(NULL, *h.get());
-    // success !!! - release the heap allocation so it
-    // doesn't delete the object we just loaded.
-    t = h.get();
-    h.release();
+    ar_impl >> boost::serialization::make_nvp(NULL, * static_cast<T *>(t));
 }
 
 template<class Archive, class T>
 pointer_iserializer<Archive, T>::pointer_iserializer() :
     basic_pointer_iserializer(
         boost::serialization::singleton<
-            BOOST_DEDUCED_TYPENAME 
+            typename 
             boost::serialization::type_info_implementation< T >::type
         >::get_const_instance()
     )
@@ -501,7 +428,7 @@ struct load_non_pointer_type {
 
     template<class T>
     static void invoke(Archive & ar, T &t){
-        typedef BOOST_DEDUCED_TYPENAME mpl::eval_if<
+        typedef typename mpl::eval_if<
                 // if its primitive
                 mpl::equal_to<
                     boost::serialization::implementation_level< T >,
@@ -509,7 +436,7 @@ struct load_non_pointer_type {
                 >,
                 mpl::identity<load_primitive>,
             // else
-            BOOST_DEDUCED_TYPENAME mpl::eval_if<
+            typename mpl::eval_if<
             // class info / version
             mpl::greater_equal<
                         boost::serialization::implementation_level< T >,
@@ -518,7 +445,7 @@ struct load_non_pointer_type {
             // do standard load
             mpl::identity<load_standard>,
         // else
-        BOOST_DEDUCED_TYPENAME mpl::eval_if<
+        typename mpl::eval_if<
             // no tracking
                     mpl::equal_to<
                         boost::serialization::tracking_level< T >,
@@ -562,7 +489,7 @@ struct load_pointer_type {
         // class pointer.  Inhibiting code generation for this
         // permits abstract base classes to be used - note: exception
         // virtual serialize functions used for plug-ins
-        typedef BOOST_DEDUCED_TYPENAME
+        typedef typename
             mpl::eval_if<
                 boost::serialization::is_abstract<const T>,
                 boost::mpl::identity<abstract>,
@@ -578,18 +505,21 @@ struct load_pointer_type {
         const T &
     ) {
         // tweak the pointer back to the base class
-        return static_cast<T *>(
-            const_cast<void *>(
-                boost::serialization::void_upcast(
-                    eti,
-                    boost::serialization::singleton<
-                        BOOST_DEDUCED_TYPENAME 
-                        boost::serialization::type_info_implementation< T >::type
-                    >::get_const_instance(),
-                    t
-                )
+        void * upcast = const_cast<void *>(
+            boost::serialization::void_upcast(
+                eti,
+                boost::serialization::singleton<
+                    typename 
+                    boost::serialization::type_info_implementation< T >::type
+                >::get_const_instance(),
+                t
             )
         );
+        if(NULL == upcast)
+            boost::serialization::throw_exception(
+                archive_exception(archive_exception::unregistered_class)
+            );
+        return static_cast<T *>(upcast);
     }
 
     template<class T>
@@ -640,7 +570,7 @@ template<class Archive>
 struct load_array_type {
     template<class T>
     static void invoke(Archive &ar, T &t){
-        typedef BOOST_DEDUCED_TYPENAME remove_extent< T >::type value_type;
+        typedef typename remove_extent< T >::type value_type;
         
         // convert integers to correct enum to load
         // determine number of elements in the array. Consider the
@@ -672,13 +602,13 @@ inline void load(Archive & ar, T &t){
     // handled below.
     detail::check_const_loading< T >();
     typedef
-        BOOST_DEDUCED_TYPENAME mpl::eval_if<is_pointer< T >,
+        typename mpl::eval_if<is_pointer< T >,
             mpl::identity<detail::load_pointer_type<Archive> >
         ,//else
-        BOOST_DEDUCED_TYPENAME mpl::eval_if<is_array< T >,
+        typename mpl::eval_if<is_array< T >,
             mpl::identity<detail::load_array_type<Archive> >
         ,//else
-        BOOST_DEDUCED_TYPENAME mpl::eval_if<is_enum< T >,
+        typename mpl::eval_if<is_enum< T >,
             mpl::identity<detail::load_enum_type<Archive> >
         ,//else
             mpl::identity<detail::load_non_pointer_type<Archive> >

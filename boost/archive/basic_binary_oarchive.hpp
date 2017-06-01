@@ -62,8 +62,18 @@ template<class Archive>
 class basic_binary_oarchive : 
     public archive::detail::common_oarchive<Archive>
 {
+#ifdef BOOST_NO_MEMBER_TEMPLATE_FRIENDS
+public:
+#else
 protected:
-    friend class detail::interface_oarchive<Archive>;
+    #if BOOST_WORKAROUND(BOOST_MSVC, < 1500)
+        // for some inexplicable reason insertion of "class" generates compile erro
+        // on msvc 7.1
+        friend detail::interface_oarchive<Archive>;
+    #else
+        friend class detail::interface_oarchive<Archive>;
+    #endif
+#endif
     // any datatype not specifed below will be handled by base class
     typedef detail::common_oarchive<Archive> detail_common_oarchive;
     template<class T>

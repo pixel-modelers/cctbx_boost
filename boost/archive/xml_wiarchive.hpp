@@ -56,10 +56,18 @@ class xml_wiarchive_impl :
 #ifdef BOOST_NO_MEMBER_TEMPLATE_FRIENDS
 public:
 #else
-    friend class detail::interface_iarchive<Archive>;
-    friend class basic_xml_iarchive<Archive>;
-    friend class load_access;
 protected:
+    #if BOOST_WORKAROUND(BOOST_MSVC, < 1500)
+        // for some inexplicable reason insertion of "class" generates compile erro
+        // on msvc 7.1
+        friend detail::interface_iarchive<Archive>;
+        friend basic_xml_iarchive<Archive>;
+        friend load_access;
+    #else
+        friend class detail::interface_iarchive<Archive>;
+        friend class basic_xml_iarchive<Archive>;
+        friend class load_access;
+    #endif
 #endif
     // instances of micro xml parser to parse start preambles
     // scoped_ptr doesn't play nice with borland - so use a naked pointer
@@ -111,21 +119,6 @@ protected:
     ~xml_wiarchive_impl();
 };
 
-// do not derive from the classes below.  If you want to extend this functionality
-// via inhertance, derived from xml_wiarchive_impl instead.  This will
-// preserve correct static polymorphism.
-
-// same as xml_wiarchive below - without the shared_ptr_helper
-class naked_xml_wiarchive : 
-    public xml_wiarchive_impl<naked_xml_wiarchive>
-{
-public:
-    naked_xml_wiarchive(std::wistream & is, unsigned int flags = 0) :
-        xml_wiarchive_impl<naked_xml_wiarchive>(is, flags)
-    {}
-    ~naked_xml_wiarchive(){}
-};
-
 } // namespace archive
 } // namespace boost
 
@@ -134,12 +127,6 @@ public:
 #endif
 
 #include <boost/archive/detail/abi_suffix.hpp> // pops abi_suffix.hpp pragmas
-
-// note special treatment of shared_ptr. This type needs a special
-// structure associated with every archive.  We created a "mix-in"
-// class to provide this functionality.  Since shared_ptr holds a
-// special esteem in the boost library - we included it here by default.
-#include <boost/archive/shared_ptr_helper.hpp>
 
 #ifdef BOOST_MSVC
 #  pragma warning(push)
@@ -150,9 +137,7 @@ namespace boost {
 namespace archive {
 
 class xml_wiarchive : 
-    public xml_wiarchive_impl<xml_wiarchive>,
-    public detail::shared_ptr_helper
-{
+    public xml_wiarchive_impl<xml_wiarchive>{
 public:
     xml_wiarchive(std::wistream & is, unsigned int flags = 0) :
         xml_wiarchive_impl<xml_wiarchive>(is, flags)

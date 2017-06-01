@@ -24,12 +24,12 @@
 #include <boost/assert.hpp>
 #include <list>
 #include <algorithm>
-#include <boost/ref.hpp>
+#include <boost/core/ref.hpp>
 #include <boost/cstdint.hpp>
 #include <boost/bind.hpp>
 #include <stdlib.h>
 #include <memory>
-#include <boost/utility/enable_if.hpp>
+#include <boost/core/enable_if.hpp>
 #include <boost/type_traits/remove_reference.hpp>
 #include <boost/io/ios_state.hpp>
 #include <boost/type_traits/is_same.hpp>
@@ -64,11 +64,9 @@ namespace boost
       {
       public:
           BOOST_THREAD_NO_COPYABLE(thread_data)
-#ifndef BOOST_NO_CXX11_RVALUE_REFERENCES
             thread_data(BOOST_THREAD_RV_REF(F) f_, BOOST_THREAD_RV_REF(ArgTypes)... args_):
               fp(boost::forward<F>(f_), boost::forward<ArgTypes>(args_)...)
             {}
-#endif
           template <std::size_t ...Indices>
           void run2(tuple_indices<Indices...>)
           {
@@ -174,7 +172,7 @@ namespace boost
     private:
         bool start_thread_noexcept();
         bool start_thread_noexcept(const attributes& attr);
-    public:
+    //public:
         void start_thread()
         {
           if (!start_thread_noexcept())
@@ -466,11 +464,20 @@ namespace boost
         inline void join();
 
 #ifdef BOOST_THREAD_USES_CHRONO
+#if defined(BOOST_THREAD_PLATFORM_WIN32)
+        template <class Rep, class Period>
+        bool try_join_for(const chrono::duration<Rep, Period>& rel_time)
+        {
+          chrono::milliseconds rel_time2= chrono::ceil<chrono::milliseconds>(rel_time);
+          return do_try_join_until(rel_time2.count());
+        }
+#else
         template <class Rep, class Period>
         bool try_join_for(const chrono::duration<Rep, Period>& rel_time)
         {
           return try_join_until(chrono::steady_clock::now() + rel_time);
         }
+#endif
         template <class Clock, class Duration>
         bool try_join_until(const chrono::time_point<Clock, Duration>& t)
         {
