@@ -3,7 +3,7 @@
 // See http://www.boost.org for updates, documentation, and revision history.
 //-----------------------------------------------------------------------------
 //
-// Copyright (c) 2013-2017 Antony Polukhin
+// Copyright (c) 2013-2019 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -25,6 +25,7 @@
 #include <boost/type_traits/add_reference.hpp>
 #include <boost/type_traits/add_pointer.hpp>
 #include <boost/type_traits/is_base_of.hpp>
+#include <boost/type_traits/is_const.hpp>
 
 namespace boost {
 

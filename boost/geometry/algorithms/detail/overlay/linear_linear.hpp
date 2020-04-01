@@ -139,18 +139,6 @@ protected:
         static bool const include_no_turn = false;
         static bool const include_degenerate = EnableDegenerateTurns;
         static bool const include_opposite = false;
-
-        template
-        <
-            typename Info,
-            typename Point1,
-            typename Point2,
-            typename IntersectionInfo
-        >
-        static inline void apply(Info& , Point1 const& , Point2 const& ,
-                                 IntersectionInfo const& )
-        {
-        }
     };
 
 
@@ -194,13 +182,15 @@ protected:
         typename Turns,
         typename LinearGeometry1,
         typename LinearGeometry2,
-        typename OutputIterator
+        typename OutputIterator,
+        typename IntersectionStrategy
     >
     static inline OutputIterator
     sort_and_follow_turns(Turns& turns,
                           LinearGeometry1 const& linear1,
                           LinearGeometry2 const& linear2,
-                          OutputIterator oit)
+                          OutputIterator oit,
+                          IntersectionStrategy const& strategy)
     {
         // remove turns that have no added value
         turns::filter_continue_turns
@@ -228,7 +218,7 @@ protected:
                 FollowIsolatedPoints,
                 !EnableFilterContinueTurns || OverlayType == overlay_intersection
             >::apply(linear1, linear2, boost::begin(turns), boost::end(turns),
-                     oit);
+                     oit, strategy.get_side_strategy());
     }
 
 public:
@@ -277,7 +267,7 @@ public:
                 OverlayType,
                 EnableFollowIsolatedPoints
                 && OverlayType == overlay_intersection
-            >(turns, linear1, linear2, oit);
+            >(turns, linear1, linear2, oit, strategy);
     }
 };
 
